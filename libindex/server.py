@@ -414,8 +414,8 @@ class LibraryHandler(SimpleHTTPRequestHandler):
   <select id=\"chapter\" title=\"Chapters\"></select>
   <span class=\"spacer\"></span>
   <button id=\"fit\" title=\"Fit height\">Fit</button>
-  <button id=\"zoomOut\" title=\"Zoom out\">−</button>
-  <button id=\"zoomIn\" title=\"Zoom in\">＋</button>
+  <button id=\"zoomOut\" title=\"Zoom out\">-</button>
+  <button id=\"zoomIn\" title=\"Zoom in\">+</button>
 </div>
 <div id=\"pdf-container\"><div id=\"pdf-pages\"></div></div>
 """
