@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS items_star (
   id INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
   starred_at REAL NOT NULL
 );
+
+-- recently viewed items
+CREATE TABLE IF NOT EXISTS items_view (
+  id INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+  last_viewed_at REAL NOT NULL,
+  view_count INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_items_view_last ON items_view(last_viewed_at DESC);
 """
 
 
@@ -312,3 +320,44 @@ def set_star(conn: sqlite3.Connection, item_id: int, on: bool) -> None:
 def is_starred(conn: sqlite3.Connection, item_id: int) -> bool:
     row = conn.execute("SELECT 1 FROM items_star WHERE id=?", (item_id,)).fetchone()
     return bool(row)
+
+
+def record_view(conn: sqlite3.Connection, item_id: int) -> None:
+    """Upsert a view record for item, updating last_viewed_at and incrementing count."""
+    now = time.time()
+    with conn:
+        # Insert or update; increment count when exists
+        cur = conn.execute("SELECT view_count FROM items_view WHERE id=?", (item_id,)).fetchone()
+        if cur is None:
+            conn.execute(
+                "INSERT INTO items_view(id, last_viewed_at, view_count) VALUES(?, ?, ?)",
+                (item_id, now, 1),
+            )
+        else:
+            conn.execute(
+                "UPDATE items_view SET last_viewed_at=?, view_count=view_count+1 WHERE id=?",
+                (now, item_id),
+            )
+
+
+def recent_items(
+    conn: sqlite3.Connection,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[int, list[sqlite3.Row]]:
+    """Return items ordered by most recently viewed."""
+    total = conn.execute("SELECT COUNT(*) FROM items_view").fetchone()[0]
+    rows = conn.execute(
+        """
+        SELECT items.*, iv.last_viewed_at, iv.view_count,
+               CASE WHEN star.starred_at IS NULL THEN 0 ELSE 1 END AS starred,
+               star.starred_at AS starred_at
+        FROM items_view AS iv
+        JOIN items ON items.id = iv.id
+        LEFT JOIN items_star AS star ON star.id = items.id
+        ORDER BY iv.last_viewed_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (int(limit), int(offset)),
+    ).fetchall()
+    return total, rows

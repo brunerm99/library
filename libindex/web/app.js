@@ -19,6 +19,14 @@ function setViewMode(mode) {
   if (sw) sw.checked = (viewMode === 'grid');
 }
 
+// Use page-specific renderer when available
+function rerender(offset = 0) {
+  if (typeof window.pageRender === 'function') {
+    return window.pageRender(offset);
+  }
+  return render(offset);
+}
+
 // --- Hover preview (PDF first page or EPUB cover) ---
 let _previewEl;
 let _previewTimer;
@@ -289,6 +297,15 @@ async function search(q, ext, smart, offset = 0, limit = 50) {
   return res.json();
 }
 
+async function recent(offset = 0, limit = 50) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  const res = await fetch(`/api/recent?${params.toString()}`);
+  if (!res.ok) throw new Error('recent failed');
+  return res.json();
+}
+
 async function triggerScan() {
   $('#status').textContent = 'Starting scan…';
   try {
@@ -324,7 +341,7 @@ async function pollScanStatus() {
       $('#status').textContent = 'Idle';
     }
   } catch (e) {
-    $('#status').textContent = 'Scan status unavailable';
+  $('#status').textContent = 'Scan status unavailable';
   }
 }
 
@@ -337,7 +354,7 @@ async function triggerEnrichAll() {
     $('#status').textContent = `Enriched: updated ${data.updated} of ${data.processed} (missing ${data.missing}, denied ${data.denied}).`;
     await render();
   } catch (e) {
-    $('#status').textContent = 'Enrich all failed';
+  $('#status').textContent = 'Enrich all failed';
   }
 }
 
@@ -410,33 +427,46 @@ async function render(offset = 0) {
   $('#status').textContent = `${data.total} result(s)` + (smart ? ' • smart' : '');
 }
 
+async function renderRecent(offset = 0) {
+  const data = await recent(offset);
+  const list = $('#results');
+  list.classList.toggle('grid', viewMode === 'grid');
+  list.innerHTML = '';
+  if (viewMode === 'grid') {
+    data.items.forEach(x => list.appendChild(itemCard(x)));
+  } else {
+    data.items.forEach(x => list.appendChild(itemRow(x)));
+  }
+  $('#status').textContent = `${data.total} recently viewed`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   setupHoverPreview();
   // Initialize view toggle
   setViewMode(viewMode);
   const viewSwitch = document.getElementById('viewSwitch');
-  if (viewSwitch) viewSwitch.addEventListener('change', (e) => { setViewMode(viewSwitch.checked ? 'grid' : 'list'); render(); });
+  if (viewSwitch) viewSwitch.addEventListener('change', (e) => { setViewMode(viewSwitch.checked ? 'grid' : 'list'); rerender(); });
   const viewCtl = document.getElementById('viewModeControl');
   if (viewCtl) viewCtl.addEventListener('click', (e) => {
     const sw = document.getElementById('viewSwitch');
     const target = e.target;
     if (target.classList && target.classList.contains('left')) {
-      setViewMode('list'); if (sw) sw.checked = false; render(); return;
+      setViewMode('list'); if (sw) sw.checked = false; rerender(); return;
     }
     if (target.classList && target.classList.contains('right')) {
-      setViewMode('grid'); if (sw) sw.checked = true; render(); return;
+      setViewMode('grid'); if (sw) sw.checked = true; rerender(); return;
     }
     if (target.classList && target.classList.contains('slider')) {
       const nextOn = !(sw && sw.checked);
-      setViewMode(nextOn ? 'grid' : 'list'); if (sw) sw.checked = nextOn; render(); return;
+      setViewMode(nextOn ? 'grid' : 'list'); if (sw) sw.checked = nextOn; rerender(); return;
     }
   });
-  const debounced = debounce(() => render(), 180);
-  $('#q').addEventListener('input', debounced);
-  $('#ext').addEventListener('change', () => render());
-  $('#smart').addEventListener('change', () => render());
-  $('#scan').addEventListener('click', () => triggerScan());
-  $('#enrichAll').addEventListener('click', () => triggerEnrichAll());
+  const debounced = debounce(() => rerender(), 180);
+  const qEl = $('#q'); if (qEl) qEl.addEventListener('input', debounced);
+  const extEl = $('#ext'); if (extEl) extEl.addEventListener('change', () => rerender());
+  const smartEl = $('#smart'); if (smartEl) smartEl.addEventListener('change', () => rerender());
+  const scanBtn = $('#scan'); if (scanBtn) scanBtn.addEventListener('click', () => triggerScan());
+  const enrichBtn = $('#enrichAll'); if (enrichBtn) enrichBtn.addEventListener('click', () => triggerEnrichAll());
   // Keyboard shortcut: Ctrl+/ (or Cmd+/) to focus search
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === '/') {
@@ -453,5 +483,5 @@ document.addEventListener('DOMContentLoaded', () => {
     const smart = $('#smart'); if (smart) smart.checked = true;
     render();
   });
-  render();
+  rerender();
 });

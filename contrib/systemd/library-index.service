@@ -7,7 +7,7 @@ After=network-online.target docker.service
 # Replace with path to your libary
 WorkingDirectory=/home/marchall/documents/library
 Type=oneshot
-ExecStart=/usr/bin/env docker compose up -d
+ExecStart=/usr/bin/env docker compose up --build -d
 ExecStop=/usr/bin/env docker compose down
 RemainAfterExit=yes
 TimeoutStartSec=0

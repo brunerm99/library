@@ -23,10 +23,14 @@ body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Ro
 .brand .title { font-weight: 600; letter-spacing: .2px; }
 .actions { display: flex; gap: 8px; }
 .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   background: var(--accent);
   color: #ffffff; border: none; padding: 8px 12px; border-radius: 10px;
   cursor: pointer; font-weight: 600; box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  text-decoration: none; line-height: 1.1;
+  font-size: 1rem; /* ensure anchors and buttons match */
 }
+.btn:link, .btn:visited { color: #ffffff; text-decoration: none; }
 .btn:hover { filter: brightness(1.08); }
 .container { max-width: 1100px; margin: 0 auto; padding: 18px 16px; }
 .searchbar { display: grid; gap: 8px; }
@@ -46,20 +50,23 @@ body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Ro
 .switch input:checked + .slider::after { transform: translateX(18px); }
 .switch .label { font-size: .9em; color: var(--muted); }
 .statusline { color: var(--muted); font-size: .95em; padding: 0 4px; }
+/* Recent page: push mode switch to the far right like main */
+.recent .input-group { grid-template-columns: 28px 1fr max-content max-content max-content; }
+.recent .input-group #viewModeControl { grid-column: 5; justify-self: end; }
 
 /* View toggle button styling (compact) */
 /* View mode switch: List (left) ↔ Thumbnails (right) */
-.mode-switch { display: inline-flex; align-items: center; gap: 8px; }
-.mode-switch .label { font-size: .9em; color: var(--muted); }
+.mode-switch { display: inline-flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 999px; background: color-mix(in oklab, var(--overlay) 88%, transparent); border: 1px solid var(--border); }
+.mode-switch .label { font-size: .9em; color: var(--muted); white-space: nowrap; }
 .mode-switch input { display: none; }
-.mode-switch .slider { width: 42px; height: 24px; background: var(--overlay); border-radius: 999px; position: relative; transition: background .2s; border: 1px solid var(--border); }
-.mode-switch .slider::after { content: ""; position: absolute; width: 18px; height: 18px; top: 3px; left: 3px; border-radius: 50%; background: #ffffff; transition: transform .2s; }
+.mode-switch .slider { display: inline-block; vertical-align: middle; width: 50px; height: 28px; line-height: 0; background: #3a474d; border-radius: 999px; position: relative; transition: background .2s; border: 1px solid var(--border); box-shadow: inset 0 1px 2px rgba(0,0,0,.25); }
+.mode-switch .slider::after { content: ""; position: absolute; width: 22px; height: 22px; top: 3px; left: 3px; border-radius: 50%; background: #ffffff; transition: transform .2s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
 .mode-switch .slider, .mode-switch .label { cursor: pointer; user-select: none; }
 .mode-switch.grid-on .right { color: var(--text); }
 .mode-switch.grid-on .left { color: var(--muted); }
 .mode-switch:not(.grid-on) .left { color: var(--text); }
 .mode-switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
-.mode-switch input:checked + .slider::after { transform: translateX(18px); }
+.mode-switch input:checked + .slider::after { transform: translateX(22px); }
 
 .cards { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 10px; }
 .row { display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px; background: var(--overlay); border: 1px solid var(--border); grid-template-columns: 24px 1fr 6ch 9ch auto; align-items: center; }

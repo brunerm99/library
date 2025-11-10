@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1F262A" />
+  <title>Recently Viewed • Library</title>
+  <link rel="icon" href="/favicon.png" type="image/png" />
+  <link rel="stylesheet" href="/styles.css" />
+  <!-- Preview deps to support hover thumbnails on this page -->
+  <script src="/vendor/pdfjs/pdf.min.js"></script>
+  <script> if (window['pdfjsLib']) { pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js'; } </script>
+  <script src="/vendor/epub/jszip.min.js"></script>
+  <script src="/vendor/epub/epub.min.js"></script>
+</head>
+<body class="recent">
+  <header class="appbar">
+    <a href="/" class="brand" title="Home">
+      <img src="/favicon.png" alt="" width="40" height="40" />
+      <span class="title">Library</span>
+    </a>
+    <div class="actions">
+      <a href="/recent.html" class="btn" aria-current="page">Recent</a>
+      <a href="/" class="btn">Home</a>
+    </div>
+  </header>
+  <main class="container">
+    <section class="searchbar">
+      <div class="input-group">
+        <div id="viewModeControl" class="mode-switch" title="View mode">
+          <span class="label left">List</span>
+          <input type="checkbox" id="viewSwitch" />
+          <span class="slider"></span>
+          <span class="label right">Thumbnails</span>
+        </div>
+      </div>
+      <div class="statusline">
+        <span id="status">Recently viewed</span>
+      </div>
+    </section>
+    <section>
+      <ul id="results" class="cards"></ul>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Tell app.js to use Recent renderer and kick initial render
+      window.pageRender = renderRecent;
+      setViewMode(localStorage.getItem('viewMode') || 'grid');
+      rerender();
+    });
+  </script>
+</body>
+</html>

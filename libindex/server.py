@@ -21,6 +21,8 @@ from .db import (
     search as db_search,
     smart_search as db_smart_search,
     get_item,
+    recent_items as db_recent_items,
+    record_view as db_record_view,
 )
 from .scanner import scan_into
 
@@ -33,6 +35,8 @@ class LibraryHandler(SimpleHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path.startswith("/api/search"):
             return self.handle_search()
+        if self.path.startswith("/api/recent"):
+            return self.handle_recent()
         if self.path.startswith("/api/log"):
             return self.handle_log()
         if self.path.startswith("/api/logs"):
@@ -149,6 +153,19 @@ class LibraryHandler(SimpleHTTPRequestHandler):
             "total": total,
             "items": [dict(r) for r in rows],
             "smart": smart,
+        }
+        return self._json_response(data)
+
+    def handle_recent(self):
+        qs = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(qs)
+        limit = int((params.get("limit") or ["50"])[0])
+        offset = int((params.get("offset") or ["0"])[0])
+        conn = connect(self.db_path)
+        total, rows = db_recent_items(conn, limit=limit, offset=offset)
+        data = {
+            "total": total,
+            "items": [dict(r) for r in rows],
         }
         return self._json_response(data)
 
@@ -289,6 +306,11 @@ class LibraryHandler(SimpleHTTPRequestHandler):
         if not row:
             self.send_error(HTTPStatus.NOT_FOUND, "Not found")
             return
+        # record this view
+        try:
+            db_record_view(conn, item_id)
+        except Exception as e:
+            logger.exception("record_view failed: {}", e)
         ext = row["ext"].lower()
         name = row["name"]
         file_url = f"/file/{row['id']}"
