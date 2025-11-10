@@ -1,4 +1,9 @@
-# Library
+<div style="display:flex;align-items:center;">
+  <img src="./libindex/web/favicon.png" alt="Example" width="80" style="margin-right:10px;">
+  <h1>Library</h1>
+</div>
+
+<br>
 
 I wanted a nice interface for all the papers, books, articles, etc. I've accumulated, so I ~~created~~ told an LLM to create this personal library (papers not included).
 
