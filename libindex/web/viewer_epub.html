@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>__TITLE__</title>
+  <meta name="theme-color" content="#1F262A" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root { --base:#1F262A; --surface:#51676D; --overlay:#2A3439; --text:#AAAAAD; --muted:#848B89; --accent:#E94560; }
+    html, body { height:100%; margin:0; background:var(--base); color:var(--text); overflow: hidden; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); border-bottom:1px solid rgba(224,222,244,.1); }
+    .title { font-weight:600; }
+    .actions a { color:var(--accent); text-decoration:none; }
+    .viewer { height:calc(100% - 46px); display:flex; flex-direction:column; }
+    .pdf-toolbar { display:flex; gap:8px; align-items:center; padding:6px 8px; background:var(--surface); border-bottom:1px solid rgba(224,222,244,.1); position: sticky; top: 0; z-index: 5; overflow: visible; }
+    #epub-chapter { z-index: 6; }
+    #epub-view { position: relative; z-index: 1; }
+    .pdf-toolbar .spacer { flex:1 1 auto; }
+    .pdf-toolbar button, .pdf-toolbar select { background:var(--overlay); color:var(--text); border:1px solid rgba(249,249,249,.12); border-radius:6px; padding:4px 8px; cursor:pointer; }
+    #epub-view { flex:1 1 auto; width:100%; height:100%; background:var(--overlay); overflow: auto; position: relative; }
+    /* Chapters overlay */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .overlay.show { display: flex; }
+    .panel { width: min(90vw, 600px); max-height: 80vh; background: var(--surface); border: 1px solid rgba(224,222,244,.1); border-radius: 10px; display: flex; flex-direction: column; }
+    .panel-header { display:flex; align-items:center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid rgba(224,222,244,.1); }
+    .panel-header .title { font-weight: 600; }
+    .panel-header button { background: var(--overlay); color: var(--text); border: 1px solid rgba(224,222,244,.12); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+    .panel .list { overflow: auto; padding: 8px 12px; }
+    .panel .list .item { padding: 6px 4px; cursor: pointer; border-radius: 6px; }
+    .panel .list .item:hover { background: rgba(233,69,96,.15); }
+  </style>
+  <script src="/vendor/epub/jszip.min.js"></script>
+  <script src="/vendor/epub/epub.min.js"></script>
+  <script>
+    function reportLog(obj){ try{ const data = JSON.stringify(obj||{}); if (navigator.sendBeacon){ navigator.sendBeacon('/api/log', new Blob([data], {type:'application/json'})); } else { fetch('/api/log',{method:'POST', headers:{'Content-Type':'application/json'}, body:data}); } }catch(_){}}
+    window.addEventListener('error', (e)=>{ try{ reportLog({level:'error', type:'viewer_js_error', message:String(e.message||''), file:e.filename, line:e.lineno, col:e.colno, id: __ITEM_ID__}); }catch(_){ } });
+  </script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="title">__TITLE__</div>
+    <div class="actions"><a href="__FILE_URL__" download>Download</a></div>
+  </div>
+  <div class="viewer">
+    <div class="pdf-toolbar">
+      <button id="epub-prev" title="Previous">◀</button>
+      <span id="epubPageLabel">— / —</span>
+      <button id="epub-next" title="Next">▶</button>
+      <select id="epub-chapter" title="Chapters"></select>
+      <button id="chaptersBtn" title="All chapters">Chapters</button>
+      <span class="spacer"></span>
+      <button id="fontDec" title="Smaller A">A−</button>
+      <button id="fontInc" title="Larger A">A＋</button>
+      <button id="cwidthDec" title="Narrower content">CW−</button>
+      <button id="cwidthInc" title="Wider content">CW＋</button>
+    </div>
+    <div id="epub-view"></div>
+    <div id="chaptersOverlay" class="overlay">
+      <div class="panel">
+        <div class="panel-header"><div class="title">Chapters</div><button id="chapClose">Close</button></div>
+        <div class="list" id="chapList"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const FILE_URL = __FILE_URL_JSON__;
+    const ITEM_ID = __ITEM_ID__;
+    function dragScrollable(el){ let down=false, sx=0, sy=0, st=0, sl=0; el.style.cursor='grab'; el.addEventListener('mousedown', (e)=>{ down=true; el.style.cursor='grabbing'; sx=e.clientX; sy=e.clientY; st=el.scrollTop; sl=el.scrollLeft; e.preventDefault(); }); window.addEventListener('mousemove', (e)=>{ if(!down) return; el.scrollTo({ top: st - (e.clientY-sy), left: sl - (e.clientX-sx), behavior:'auto' }); }); window.addEventListener('mouseup', ()=>{ down=false; el.style.cursor='grab'; }); }
+    function normalizeHref(h){ try { const base = (h||'').split('#')[0]; return (book && book.path && book.path.resolve) ? book.path.resolve(base) : base; } catch(_) { return (h||'').split('#')[0]; } }
+    function applyCWToView(view, px){
+      try {
+        px = Math.max(400, Math.min(1200, px|0));
+        const doc = view && view.document; if (!doc) return;
+        const html = doc.documentElement; const body = doc.body;
+        [html, body].forEach(el=>{ if(!el) return; el.style.maxWidth = px+'px'; el.style.marginLeft='auto'; el.style.marginRight='auto'; });
+        let st = doc.getElementById('appWidthStyle');
+        if (!st){ st = doc.createElement('style'); st.id='appWidthStyle'; doc.head.appendChild(st); }
+        st.textContent = 'img{max-width:100%;height:auto}';
+      } catch(_){ }
+    }
+    function updateSectionLabelFromHref(cur){
+      try{
+        const items = (book && book.spine && book.spine.spineItems) ? book.spine.spineItems : [];
+        const canonCur = normalizeHref(cur||'');
+        let idx = -1;
+        for(let i=0;i<items.length;i++){
+          const it = items[i];
+          const href = normalizeHref(it && (it.href || it.idref || ''));
+          if (href && href === canonCur) { idx = i; break; }
+        }
+        const label = (idx >= 0) ? (String(idx+1) + ' / ' + String(items.length)) : '— / —';
+        const el = document.getElementById('epubPageLabel');
+        if (el) el.textContent = label;
+      }catch(_){ /* ignore */ }
+    }
+    const viewer = document.querySelector('.viewer'); if (viewer) dragScrollable(viewer);
+    const KEY = 'epubcfi:'+ITEM_ID;
+    let book, rendition;
+    function ensureJSZip(){
+      if (window.JSZip) return Promise.resolve();
+      // Fallback to CDN if local missing
+      return new Promise((resolve)=>{
+        try{
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+          s.onload = ()=>resolve();
+          document.head.appendChild(s);
+        }catch(_){ resolve(); }
+      });
+    }
+    fetch(FILE_URL).then(r=>{ if(!r.ok){ throw new Error('HTTP '+r.status); } return r.arrayBuffer(); }).then(buf=>{
+      return ensureJSZip().then(()=>buf);
+    }).then(buf=>{
+      try{ book = ePub(buf); } catch(err){ reportLog({level:'error', type:'epub_init_error', id: ITEM_ID, error:String(err)}); throw err; }
+      rendition = book.renderTo('epub-view', { width: '100%', height: '100%', allowScriptedContent: true });
+      try { rendition.flow('scrolled-doc'); } catch(e) { try { rendition.flow('scrolled'); } catch(_){ reportLog({level:'warning', type:'epub_flow_fallback', id: ITEM_ID}); } }
+      rendition.themes.default({ 'body': { 'background': getComputedStyle(document.documentElement).getPropertyValue('--overlay').trim() || '#2A3439', 'color': getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#AAAAAD' } });
+      return book.ready.then(()=>{
+        const fs = localStorage.getItem('epubfont:'+ITEM_ID) || '100%';
+        try { rendition.themes.fontSize(fs); } catch(_){ }
+        const cfi = localStorage.getItem(KEY);
+        if (cfi) { return rendition.display(cfi).catch((err)=>{ reportLog({level:'warning', type:'epub_display_cfi_fallback', id: ITEM_ID, error:String(err)}); return rendition.display(); }); }
+        else { return rendition.display(); }
+      }).then(()=>{
+        // Ensure EPUB iframe allows scripts (fix sandbox defaults)
+        try {
+          // Fast path: observe iframe insertions, set sandbox, and apply content width
+          const container = document.getElementById('epub-view');
+          if (container && window.MutationObserver){
+            const mo = new MutationObserver((muts)=>{
+              muts.forEach(m=>{
+                m.addedNodes && m.addedNodes.forEach(n=>{
+                  if (n && n.tagName === 'IFRAME'){
+                    try{ n.setAttribute('sandbox','allow-same-origin allow-scripts'); }catch(_){ }
+                    try{ const px = parseInt(localStorage.getItem('epubcontentwidth:'+ITEM_ID) || '700',10); const v = rendition && rendition.views && rendition.views().find(v=>v && v.iframe===n); if (v) applyCWToView(v, px); }catch(_){ }
+                  }
+                });
+              });
+            });
+            mo.observe(container, { childList: true, subtree: true });
+          }
+          rendition.on('rendered', (section, view)=>{
+            try {
+              const iframe = view && view.iframe;
+              if (iframe) {
+                const wanted = 'allow-same-origin allow-scripts';
+                const cur = (iframe.getAttribute('sandbox')||'').trim();
+                if (cur !== wanted) iframe.setAttribute('sandbox', wanted);
+              }
+              try { const px = parseInt(localStorage.getItem('epubcontentwidth:'+ITEM_ID) || '700',10); applyCWToView(view, px); } catch(_){ }
+            } catch(_){ }
+          });
+        } catch(_){ }
+        function saveEpub(){ try{ const loc = rendition.currentLocation(); if(loc && loc.start && loc.start.cfi){ localStorage.setItem(KEY, loc.start.cfi); } } catch{} }
+        rendition.on('relocated', (loc)=>{ try { if(loc && loc.start && loc.start.cfi){ localStorage.setItem(KEY, loc.start.cfi); } const sel=document.getElementById('epub-chapter'); if(sel && loc.start && loc.start.href){ const cur = normalizeHref(loc.start.href); const opts = Array.from(sel.options); const found = opts.find(o=> (o.dataset.canon||normalizeHref(o.value))===cur ); if(found){ sel.value = found.value; } updateSectionLabelFromHref(cur); } } catch(e){ reportLog({level:'warning', type:'epub_relocated_error', id: ITEM_ID, error:String(e)}); } });
+        return book.loaded.navigation.then(nav=>{
+          const sel = document.getElementById('epub-chapter'); sel.innerHTML='';
+          const toc = nav.toc||[];
+          const stack=[...toc];
+          while(stack.length){
+            const item=stack.shift();
+            const raw = item.href || '';
+            const opt=document.createElement('option');
+            opt.value = raw;                       /* keep raw href for display() */
+            opt.dataset.canon = normalizeHref(raw);/* store normalized for matching */
+            opt.textContent = item.label || raw;
+            sel.appendChild(opt);
+            if(item.subitems) stack.push(...item.subitems);
+            if(item.items) stack.push(...item.items);
+          }
+          // Build overlay list
+          try {
+            const list = document.getElementById('chapList');
+            const options = Array.from(sel.options);
+            options.forEach((o, i)=>{
+              const div = document.createElement('div');
+              div.className = 'item';
+              div.textContent = o.textContent || o.value || ('Chapter '+(i+1));
+              div.onclick = ()=>{ sel.value = o.value; sel.dispatchEvent(new Event('change')); toggleChapters(false); };
+              list.appendChild(div);
+            });
+          } catch(_){ }
+          sel.onchange=()=>{
+            const idx = sel.selectedIndex;
+            const opt = idx >= 0 ? sel.options[idx] : null;
+            const raw = opt ? opt.value : sel.value;
+            if(!raw) return;
+            // Directly display raw href; epub.js resolves it relative to the book
+            rendition.display(raw)
+              .then(()=>saveEpub())
+              .catch(err=>{
+                // Try without fragment if it fails
+                try {
+                  const base = raw.split('#')[0];
+                  rendition.display(base).then(()=>saveEpub()).catch(e2=>{
+                    reportLog({level:'error', type:'epub_display_href_error', id: ITEM_ID, href: raw, error:String(err)+"; fallback:"+String(e2)});
+                  });
+                } catch(_) {
+                  reportLog({level:'error', type:'epub_display_href_error', id: ITEM_ID, href: raw, error:String(err)});
+                }
+              });
+          };
+          // Overlay toggle handlers
+          function toggleChapters(show){
+            const ov = document.getElementById('chaptersOverlay');
+            if (!ov) return;
+            if (show) {
+              ov.classList.add('show');
+            } else {
+              ov.classList.remove('show');
+            }
+          }
+          const openBtn = document.getElementById('chaptersBtn');
+          if (openBtn) openBtn.onclick = () => toggleChapters(true);
+          const closeBtn = document.getElementById('chapClose');
+          if (closeBtn) closeBtn.onclick = () => toggleChapters(false);
+          // Close on outside click (backdrop) and Escape key
+          try {
+            const ov = document.getElementById('chaptersOverlay');
+            if (ov) {
+              ov.addEventListener('mousedown', (e) => { if (e.target === ov) toggleChapters(false); });
+            }
+            window.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleChapters(false); });
+          } catch(_) { }
+          const prevBtn = document.getElementById('epub-prev'); const nextBtn = document.getElementById('epub-next');
+          if (prevBtn) prevBtn.onclick=()=>rendition.prev().then(()=>saveEpub()).catch(err=>reportLog({level:'error', type:'epub_prev_error', id: ITEM_ID, error:String(err)}));
+          if (nextBtn) nextBtn.onclick=()=>rendition.next().then(()=>saveEpub()).catch(err=>reportLog({level:'error', type:'epub_next_error', id: ITEM_ID, error:String(err)}));
+          function applyFontSize(sz){ try { rendition.themes.fontSize(sz); localStorage.setItem('epubfont:'+ITEM_ID, sz);}catch(_){}}
+          const dec = document.getElementById('fontDec');
+          const inc = document.getElementById('fontInc');
+          if (dec) dec.onclick=()=>{ try{ const cur = localStorage.getItem('epubfont:'+ITEM_ID) || '100%'; const v = Math.max(50, Math.min(300, parseInt(cur,10)-10)); applyFontSize(String(v)+'%'); }catch(_){ } };
+          if (inc) inc.onclick=()=>{ try{ const cur = localStorage.getItem('epubfont:'+ITEM_ID) || '100%'; const v = Math.max(50, Math.min(300, parseInt(cur,10)+10)); applyFontSize(String(v)+'%'); }catch(_){ } };
+
+          // Content width controls (max-width of content, centered). Single source of truth
+          function applyContentWidth(px){
+            try {
+              px = Math.max(400, Math.min(1200, px|0));
+              localStorage.setItem('epubcontentwidth:'+ITEM_ID, String(px));
+              // Apply to all currently rendered views
+              try { const views = rendition && rendition.views ? rendition.views() : []; views && views.forEach && views.forEach(v=>applyCWToView(v, px)); } catch(_){ }
+            } catch(_){ }
+          }
+          const cwdec = document.getElementById('cwidthDec');
+          const cwinc = document.getElementById('cwidthInc');
+          if (cwdec) cwdec.onclick=()=>{ try{ const cur = parseInt(localStorage.getItem('epubcontentwidth:'+ITEM_ID) || '700',10); applyContentWidth(cur - 40); }catch(_){ } };
+          if (cwinc) cwinc.onclick=()=>{ try{ const cur = parseInt(localStorage.getItem('epubcontentwidth:'+ITEM_ID) || '700',10); applyContentWidth(cur + 40); }catch(_){ } };
+          // Initialize width and font size from saved preference or defaults
+          try { const initCW = parseInt(localStorage.getItem('epubcontentwidth:'+ITEM_ID) || '700',10); applyContentWidth(initCW); } catch(_){ }
+          try { const fs = localStorage.getItem('epubfont:'+ITEM_ID) || '100%'; applyFontSize(fs); } catch(_){ }
+        });
+      });
+    }).catch((err)=>{
+      reportLog({level:'error', type:'epub_fetch_or_init_error', id: ITEM_ID, error:String(err)});
+      document.getElementById('epub-view').innerHTML = '<p style="padding:12px">Failed to load EPUB.</p>';
+    });
+  </script>
+</body>
+</html>

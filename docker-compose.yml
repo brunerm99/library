@@ -1,0 +1,17 @@
+services:
+  library:
+    container_name: library
+    build: .
+    image: local/library-index:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - LIBRARY_ROOTS=/content
+      - LIBINDEX_AUTOSCAN=1
+    volumes:
+      - library_data:/data
+      - /home/marchall/documents/brewery/References:/content:ro
+    restart: unless-stopped
+
+volumes:
+  library_data:

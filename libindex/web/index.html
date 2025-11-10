@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1F262A" />
+  <title>Library</title>
+  <link rel="icon" href="/favicon.png" type="image/png" />
+  <link rel="stylesheet" href="/styles.css" />
+  <!-- Preview dependencies: pdf.js and epub.js (already bundled for viewers) -->
+  <script src="/vendor/pdfjs/pdf.min.js"></script>
+  <script> if (window['pdfjsLib']) { pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js'; } </script>
+  <script src="/vendor/epub/jszip.min.js"></script>
+  <script src="/vendor/epub/epub.min.js"></script>
+</head>
+<body>
+  <header class="appbar">
+    <a href="#" id="homeLink" class="brand" title="Home">
+      <img src="/favicon.png" alt="" width="40" height="40" />
+      <span class="title">Library</span>
+    </a>
+    <div class="actions">
+      <button id="scan" class="btn">Scan</button>
+      <button id="enrichAll" class="btn" title="Extract content and tags for all indexed files">Enrich All</button>
+    </div>
+  </header>
+  <main class="container">
+    <section class="searchbar">
+      <div class="input-group">
+        <span class="icon" aria-hidden>🔎</span>
+        <input id="q" type="text" placeholder="Search books, papers, topics…" autocomplete="off" />
+        <select id="ext" class="select">
+          <option value="">All</option>
+          <option>pdf</option>
+          <option>epub</option>
+          <option>mobi</option>
+          <option>azw3</option>
+          <option>djvu</option>
+          <option>cbz</option>
+          <option>cbr</option>
+          <option>txt</option>
+        </select>
+        <label class="switch" title="Smart full-text search">
+          <input type="checkbox" id="smart" checked />
+          <span class="slider"></span>
+          <span class="label">Smart</span>
+        </label>
+        <div id="viewModeControl" class="mode-switch" title="View mode">
+          <span class="label left">List</span>
+          <input type="checkbox" id="viewSwitch" />
+          <span class="slider"></span>
+          <span class="label right">Thumbnails</span>
+        </div>
+      </div>
+      <div class="statusline">
+        <span id="status">Ready</span>
+      </div>
+    </section>
+    <section>
+      <ul id="results" class="cards"></ul>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+  <script>
+    // focus search on load and default Smart on
+    const q = document.getElementById('q');
+    if (q) q.focus();
+    const smart = document.getElementById('smart');
+    if (smart) smart.checked = true;
+  </script>
+  </body>
+  </html>

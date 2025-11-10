@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>__TITLE__</title>
+  <meta name="theme-color" content="#1F262A" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root { --base:#1F262A; --surface:#51676D; --overlay:#2A3439; --text:#AAAAAD; --muted:#848B89; --accent:#E94560; }
+    html, body { height:100%; margin:0; background:var(--base); color:var(--text); overflow: hidden; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); border-bottom:1px solid rgba(224,222,244,.1); }
+    .title { font-weight:600; }
+    .actions a { color:var(--accent); text-decoration:none; }
+    .viewer { height:calc(100% - 46px); display:flex; flex-direction:column; }
+    .pdf-toolbar { display:flex; gap:8px; align-items:center; padding:6px 8px; background:var(--surface); border-bottom:1px solid rgba(224,222,244,.1); }
+    .pdf-toolbar .spacer { flex:1 1 auto; }
+    .pdf-toolbar button, .pdf-toolbar select { background:var(--overlay); color:var(--text); border:1px solid rgba(249,249,249,.12); border-radius:6px; padding:4px 8px; cursor:pointer; }
+    #pdf-container { flex:1 1 auto; overflow:auto; display:flex; justify-content:center; align-items:flex-start; background:var(--overlay); }
+    #pdf-pages .page { display:flex; justify-content:center; padding:10px 0; }
+    #pdf-pages canvas { max-width:100%; height:auto; }
+  </style>
+  <script src="/vendor/pdfjs/pdf.min.js"></script>
+  <script>
+    if (window['pdfjsLib']) { pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js'; }
+    function reportLog(obj){ try{ const data = JSON.stringify(obj||{}); if (navigator.sendBeacon){ navigator.sendBeacon('/api/log', new Blob([data], {type:'application/json'})); } else { fetch('/api/log',{method:'POST', headers:{'Content-Type':'application/json'}, body:data}); } }catch(_){}}
+    window.addEventListener('error', (e)=>{ try{ reportLog({level:'error', type:'viewer_js_error', message:String(e.message||''), file:e.filename, line:e.lineno, col:e.colno, id: __ITEM_ID__}); }catch(_){ } });
+  </script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="title">__TITLE__</div>
+    <div class="actions"><a href="__FILE_URL__" download>Download</a></div>
+  </div>
+  <div class="viewer">
+    <div class="pdf-toolbar">
+      <button id="prev" title="Previous page">◀</button>
+      <span id="pageLabel">1 / ?</span>
+      <button id="next" title="Next page">▶</button>
+      <select id="chapter" title="Chapters"></select>
+      <span class="spacer"></span>
+      <button id="fit" title="Fit height">Fit</button>
+      <button id="zoomOut" title="Zoom out">−</button>
+      <button id="zoomIn" title="Zoom in">＋</button>
+    </div>
+    <div id="pdf-container"><div id="pdf-pages"></div></div>
+  </div>
+  <script>
+    const FILE_URL = __FILE_URL_JSON__;
+    const ITEM_ID = __ITEM_ID__;
+    const _debounce = (fn, ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); } };
+    let pdfDoc=null, pageNum=1, scale=1.0, autoFit=true, fitMode='height';
+    const KEY='pdfpos:'+ITEM_ID;
+    const container = document.getElementById('pdf-container');
+    const pagesEl = document.getElementById('pdf-pages');
+    function updatePageLabel(){ document.getElementById('pageLabel').textContent = pageNum+' / '+(pdfDoc?pdfDoc.numPages:'?'); }
+    function fitWidthScale(page){ const vw = page.getViewport({scale:1}); const cw = container.clientWidth||vw.width; return Math.max(0.5, Math.min(4, cw / vw.width)); }
+    function fitHeightScale(page){ const vw = page.getViewport({scale:1}); const ch = container.clientHeight||vw.height; return Math.max(0.5, Math.min(4, ch / vw.height)); }
+    function pageScale(page){ if(!autoFit) return scale||1; return (fitMode==='height')? fitHeightScale(page): fitWidthScale(page); }
+    function dragScrollable(el){ let down=false, sx=0, sy=0, st=0, sl=0; el.style.cursor='grab'; el.addEventListener('mousedown', (e)=>{ down=true; el.style.cursor='grabbing'; sx=e.clientX; sy=e.clientY; st=el.scrollTop; sl=el.scrollLeft; e.preventDefault(); }); window.addEventListener('mousemove', (e)=>{ if(!down) return; el.scrollTo({ top: st - (e.clientY-sy), left: sl - (e.clientX-sx), behavior:'auto' }); }); window.addEventListener('mouseup', ()=>{ down=false; el.style.cursor='grab'; }); }
+    dragScrollable(container);
+    function createPageView(n){ const wrap=document.createElement('div'); wrap.className='page'; wrap.dataset.page=n; const canvas=document.createElement('canvas'); canvas.dataset.rendered='0'; wrap.appendChild(canvas); return wrap; }
+    function savePdfState(){ try{ localStorage.setItem(KEY, JSON.stringify({page:pageNum, scale:scale, autoFit, fitMode})); }catch{} }
+    function renderPage(n){ if(!pdfDoc) return; const wrap = pagesEl.querySelector('[data-page="'+n+'"]'); if(!wrap) return; const canvas = wrap.querySelector('canvas'); if(canvas.dataset.rendering==='1') return; canvas.dataset.rendering='1'; pdfDoc.getPage(n).then(page=>{ const s = pageScale(page); const vp = page.getViewport({ scale: s }); canvas.width = vp.width; canvas.height = vp.height; page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise.then(()=>{ canvas.dataset.rendered='1'; canvas.dataset.rendering='0'; savePdfState(); }); }); }
+    function ensurePages(){ if(!pdfDoc) return; if(pagesEl.children.length) return; for(let i=1;i<=pdfDoc.numPages;i++){ pagesEl.appendChild(createPageView(i)); } }
+    let _visScore = {};
+    function onVisible(entries){
+      entries.forEach(entry=>{
+        const n = parseInt(entry.target.dataset.page);
+        _visScore[n] = entry.isIntersecting ? (entry.intersectionRatio || 0) : 0;
+        if(entry.isIntersecting){ renderPage(n); }
+      });
+      let best = pageNum, bestScore = -1;
+      for (const [k,v] of Object.entries(_visScore)){
+        const n = parseInt(k); if (v > bestScore){ bestScore=v; best=n; }
+      }
+      if (!isNaN(best) && best !== pageNum){ pageNum = best; updatePageLabel(); savePdfState(); }
+      const sel = document.getElementById('chapter');
+      if (sel && window.chapterStarts && window.chapterStarts.length){
+        let chosen = String(window.chapterStarts[0]);
+        for (const p of window.chapterStarts){ if (p <= pageNum) chosen = String(p); else break; }
+        if (sel.value !== chosen) sel.value = chosen;
+      }
+    }
+    const io = new IntersectionObserver(onVisible, { root: container, rootMargin: '150px 0px', threshold: [0.1,0.25,0.5,0.75] });
+    document.getElementById('prev').onclick=()=>{ if(pdfDoc && pageNum>1){ const n = pageNum-1; pageNum = n; const el=pagesEl.querySelector('[data-page="'+n+'"]'); if(el){ el.scrollIntoView({behavior:'auto', block:'start'}); } updatePageLabel(); savePdfState(); renderPage(n); }};
+    document.getElementById('next').onclick=()=>{ if(pdfDoc && pageNum<pdfDoc.numPages){ const n = pageNum+1; pageNum = n; const el=pagesEl.querySelector('[data-page="'+n+'"]'); if(el){ el.scrollIntoView({behavior:'auto', block:'start'}); } updatePageLabel(); savePdfState(); renderPage(n); }};
+    document.getElementById('zoomIn').onclick=()=>{ autoFit=false; scale=Math.min(4, (scale||1)*1.2); pagesEl.querySelectorAll('canvas').forEach(c=>c.dataset.rendered='0'); renderPage(pageNum); };
+    document.getElementById('zoomOut').onclick=()=>{ autoFit=false; scale=Math.max(0.5, (scale||1)/1.2); pagesEl.querySelectorAll('canvas').forEach(c=>c.dataset.rendered='0'); renderPage(pageNum); };
+    document.getElementById('fit').onclick=()=>{ autoFit=true; fitMode='height'; pagesEl.querySelectorAll('canvas').forEach(c=>c.dataset.rendered='0'); renderPage(pageNum); };
+    window.addEventListener('resize', _debounce(()=>{ if(autoFit){ pagesEl.querySelectorAll('canvas').forEach(c=>c.dataset.rendered='0'); renderPage(pageNum); } }, 150));
+    document.getElementById('chapter').onchange=()=>{ const val=document.getElementById('chapter').value; const n=parseInt(val||'1'); if(!isNaN(n)){ pageNum = Math.max(1, Math.min(pdfDoc.numPages, n)); const el=pagesEl.querySelector('[data-page="'+pageNum+'"]'); if(el){ el.scrollIntoView({behavior:'auto', block:'start'}); } updatePageLabel(); savePdfState(); renderPage(pageNum); }};
+    async function buildNamedDestMap(doc){
+      try {
+        if (typeof doc.getNamedDestinations === 'function') {
+          const named = await doc.getNamedDestinations();
+          const map = {};
+          for (const k in named) { try { const ref = named[k][0]; const idx = await doc.getPageIndex(ref); map[k] = idx; } catch {} }
+          return map;
+        } else if (typeof doc.getDestinations === 'function') {
+          const named = await doc.getDestinations();
+          const map = {};
+          for (const k in named) { try { const ref = named[k][0]; const idx = await doc.getPageIndex(ref); map[k] = idx; } catch {} }
+          return map;
+        }
+      } catch {}
+      return {};
+    }
+    function populateChaptersFromOutline(doc){ return doc.getOutline().then(async (outline)=>{ const sel=document.getElementById('chapter'); sel.innerHTML=''; const items=[]; function walk(nodes, depth){ (nodes||[]).forEach(n=>{ items.push({n, depth}); walk(n.items, depth+1); }); } walk(outline, 0); const added = new Set(); const starts=[]; const namedMap = await buildNamedDestMap(doc); if(items.length){ for(const {n, depth} of items){ let pageIndex=null; try{ if(n.dest){ let destArr = null; if(typeof n.dest === 'string'){ if (namedMap.hasOwnProperty(n.dest)) { pageIndex = namedMap[n.dest]; } else { const arr = await doc.getDestination(n.dest); if (arr) { const ref = arr[0]; pageIndex = await doc.getPageIndex(ref); } } } else if (Array.isArray(n.dest)) { const ref = n.dest[0]; pageIndex = await doc.getPageIndex(ref); } } else if (n.url && n.url.includes('#page=')) { const m = n.url.match(/#page=(\d+)/); if(m){ pageIndex = parseInt(m[1], 10) - 1; } } }catch(e){} if(pageIndex != null && pageIndex >= 0 && pageIndex < doc.numPages){ const pageNum1 = pageIndex + 1; if(!added.has(pageNum1)){ const opt=document.createElement('option'); opt.value=String(pageNum1); opt.textContent = ('\u00A0'.repeat(depth*2)) + (n.title||('Page '+pageNum1)); sel.appendChild(opt); added.add(pageNum1); starts.push(pageNum1); } } } } if(!sel.children.length){ for(let i=1;i<=doc.numPages;i++){ const opt=document.createElement('option'); opt.value=String(i); opt.textContent='Page '+i; sel.appendChild(opt); starts.push(i); } } starts.sort((a,b)=>a-b); window.chapterStarts = starts; sel.value=String(pageNum); }); }
+    pdfjsLib.getDocument(FILE_URL).promise.then(async doc=>{ pdfDoc=doc; try{ const raw=localStorage.getItem(KEY); const saved = raw && raw.trim().startsWith('{') ? JSON.parse(raw) : {}; if(saved.page) pageNum=saved.page; if(saved.scale) scale=saved.scale; if(typeof saved.autoFit==='boolean') autoFit=saved.autoFit; if(saved.fitMode) fitMode=saved.fitMode; }catch{} updatePageLabel(); ensurePages(); pagesEl.querySelectorAll('.page').forEach(p=>io.observe(p)); await populateChaptersFromOutline(doc); const target = pagesEl.querySelector('[data-page="'+pageNum+'"]'); if(target){ target.scrollIntoView({behavior:'auto', block:'start'}); } renderPage(pageNum); });
+  </script>
+</body>
+</html>
