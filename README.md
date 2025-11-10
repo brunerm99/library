@@ -37,3 +37,13 @@ Local PDF, EPUB, etc. library.
 ## Optional
 
 - To disable auto-scan on startup, set `LIBINDEX_AUTOSCAN=0` in `docker-compose.yml`.
+
+## Autostart (systemd)
+
+- A sample unit is provided at `contrib/systemd/library-index.service`.
+  - Edit the `WorkingDirectory` to the absolute path of this repo.
+  - Install and enable:
+    - `sudo cp contrib/systemd/library-index.service /etc/systemd/system/`
+    - `sudo systemctl daemon-reload`
+    - `sudo systemctl enable --now library-index.service`
+  - This runs `docker compose up -d` on boot and `docker compose down` on stop.

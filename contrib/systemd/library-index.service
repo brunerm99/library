@@ -1,0 +1,15 @@
+[Unit]
+Description=Library Indexer (Docker Compose)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+WorkingDirectory=/home/marchall/documents/library
+Type=oneshot
+ExecStart=/usr/bin/env docker compose up -d
+ExecStop=/usr/bin/env docker compose down
+RemainAfterExit=yes
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
