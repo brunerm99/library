@@ -4,6 +4,7 @@ Wants=network-online.target docker.service
 After=network-online.target docker.service
 
 [Service]
+# Replace with path to your libary
 WorkingDirectory=/home/marchall/documents/library
 Type=oneshot
 ExecStart=/usr/bin/env docker compose up -d

@@ -10,7 +10,8 @@ services:
       - LIBINDEX_AUTOSCAN=1
     volumes:
       - library_data:/data
-      - /home/marchall/documents/brewery/References:/content:ro
+      # path to your docs
+      - /home/marchall/documents/brewery/References:/content:ro 
     restart: unless-stopped
 
 volumes:
