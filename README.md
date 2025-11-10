@@ -2,8 +2,14 @@
 
 I wanted a nice interface for all the papers, books, articles, etc. I've accumulated, so I ~~created~~ told an LLM to create this personal library (papers not included).
 
+Example #1 (thumbnail view)
 ![fmcw search](./static/screenshot-fmcw.png)
+
+Example #2 (thumbnail view)
 ![russia search](./static/screenshot-russia.png)
+
+Example #3 (list view)
+![palist search](./static/screenshot-phased-array-list.png)
 
 ## Prerequisites
 
